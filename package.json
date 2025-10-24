@@ -1,17 +1,17 @@
 {
-  "name": "clubassistant-bot",
-  "version": "2.4.0",
-  "description": "ClubAssistant - DDLC & Project Club community bot",
+  "name": "clubassistant",
+  "version": "2.6.1",
+  "description": "Bot de DDLC para fanarts, citas, trivia, noticias y videos.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "discord.js": "13.16.0",
-    "axios": "1.6.2",
-    "cheerio": "1.0.0-rc.12"
+    "axios": "^1.7.3",
+    "cheerio": "^1.0.0-rc.12",
+    "discord.js": "^14.11.0"
   },
   "engines": {
-    "node": "16.x"
+    "node": ">=16.9.0"
   }
 }
