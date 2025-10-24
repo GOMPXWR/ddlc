@@ -1,4 +1,4 @@
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const { Client, Intents, MessageEmbed, Collection } = require('discord.js');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
@@ -10,6 +10,21 @@ const client = new Client({
         Intents.FLAGS.MESSAGE_CONTENT
     ]
 });
+
+// Información de versión y estado
+const BOT_VERSION = "2.0.0";
+const LAST_UPDATE = new Date().toISOString();
+const RELEASE_NOTES = "🎉 Slash Commands agregados\n✅ Comando /version mejorado\n⚡ Mejoras en rendimiento";
+
+let lastChecked = {
+    pClubYouTube: Date.now(),
+    pClubTwitter: Date.now(),
+    pClubMerch: Date.now(),
+    pClubAnnouncements: Date.now(),
+    ddlcNews: Date.now(),
+    ddlcMerch: Date.now(),
+    teamSalvato: Date.now()
+};
 
 // Configuración
 let serverConfig = {
@@ -45,70 +60,200 @@ let lastPosts = {
     ddlcMerch: ''
 };
 
-client.once('ready', () => {
-    console.log(`✅ ClubAssistant conectado como ${client.user.tag}`);
+// Slash Commands
+const slashCommands = {
+    // Comando configuración
+    config: {
+        data: {
+            name: 'config',
+            description: 'Configurar el bot para P Club y DDLC',
+            options: [
+                {
+                    name: 'canal',
+                    type: 7, // CHANNEL
+                    description: 'Canal para notificaciones',
+                    required: true,
+                    channel_types: [0] // TEXT_CHANNEL
+                },
+                {
+                    name: 'rol',
+                    type: 8, // ROLE
+                    description: 'Rol a mencionar en notificaciones',
+                    required: false
+                }
+            ]
+        },
+        async execute(interaction) {
+            if (!interaction.member.permissions.has('ADMINISTRATOR')) {
+                return await interaction.reply({ 
+                    content: '❌ Necesitas permisos de administrador para configurar el bot.', 
+                    ephemeral: true 
+                });
+            }
+
+            const channel = interaction.options.getChannel('canal');
+            const role = interaction.options.getRole('rol');
+
+            serverConfig.notificationChannel = channel.id;
+            serverConfig.mentionRole = role ? role.id : null;
+
+            await interaction.reply({ 
+                content: `✅ Configuración guardada:\n📢 Canal: ${channel}\n${role ? `👥 Rol: ${role}` : '👥 Sin rol mencionado'}`,
+                ephemeral: true 
+            });
+        }
+    },
+
+    // Comando fanart
+    fanart: {
+        data: {
+            name: 'fanart',
+            description: 'Obtener un fanart aleatorio de P Club o DDLC'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getFanart(interaction);
+        }
+    },
+
+    // Comando noticias
+    noticias: {
+        data: {
+            name: 'noticias',
+            description: 'Resumen de noticias de P Club y DDLC'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getLatestNews(interaction);
+        }
+    },
+
+    // Comando merch
+    merch: {
+        data: {
+            name: 'merch',
+            description: 'Mercancía oficial de P Club y DDLC'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getMerch(interaction);
+        }
+    },
+
+    // Comando mods
+    mods: {
+        data: {
+            name: 'mods',
+            description: 'Top 5 mods más descargados de la semana'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getTopMods(interaction);
+        }
+    },
+
+    // Comando ddlc
+    ddlc: {
+        data: {
+            name: 'ddlc',
+            description: 'Últimas noticias del juego original DDLC'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getDDLCNews(interaction);
+        }
+    },
+
+    // Comando pclub
+    pclub: {
+        data: {
+            name: 'pclub',
+            description: 'Información específica de Project Club'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await getPClubInfo(interaction);
+        }
+    },
+
+    // Comando estado
+    estado: {
+        data: {
+            name: 'estado',
+            description: 'Estado del bot y configuración'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await showStatus(interaction);
+        }
+    },
+
+    // Comando version
+    version: {
+        data: {
+            name: 'version',
+            description: 'Información de versión y estado del bot'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await showVersion(interaction);
+        }
+    },
+
+    // Comando ayuda
+    ayuda: {
+        data: {
+            name: 'ayuda',
+            description: 'Muestra todos los comandos disponibles'
+        },
+        async execute(interaction) {
+            await interaction.deferReply();
+            await showHelp(interaction);
+        }
+    }
+};
+
+// Registrar Slash Commands
+client.once('ready', async () => {
+    console.log(`✅ ClubAssistant v${BOT_VERSION} conectado como ${client.user.tag}`);
     client.user.setActivity('P Club & DDLC Updates', { type: 'WATCHING' });
+    
+    // Actualizar tiempos de última verificación
+    const now = Date.now();
+    Object.keys(lastChecked).forEach(key => {
+        lastChecked[key] = now;
+    });
+
+    // Registrar comandos en el servidor
+    try {
+        const commands = Object.values(slashCommands).map(cmd => cmd.data);
+        await client.application.commands.set(commands);
+        console.log(`✅ ${commands.length} slash commands registrados`);
+    } catch (error) {
+        console.error('❌ Error registrando slash commands:', error);
+    }
     
     checkForUpdates();
     setInterval(checkForUpdates, serverConfig.checkInterval);
 });
 
-// Comandos básicos (sin slash commands por ahora)
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+// Manejar Slash Commands
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isCommand()) return;
 
-    const args = message.content.slice('!').trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+    const command = slashCommands[interaction.commandName];
+    if (!command) return;
 
-    switch(command) {
-        case 'config':
-            await configCommand(message, args);
-            break;
-        case 'fanart':
-            await getFanart(message);
-            break;
-        case 'noticias':
-            await getLatestNews(message);
-            break;
-        case 'merch':
-            await getMerch(message);
-            break;
-        case 'mods':
-            await getTopMods(message);
-            break;
-        case 'ddlc':
-            await getDDLCNews(message);
-            break;
-        case 'pclub':
-            await getPClubInfo(message);
-            break;
-        case 'estado':
-            await showStatus(message);
-            break;
-        case 'ayuda':
-            await showHelp(message);
-            break;
+    try {
+        await command.execute(interaction);
+    } catch (error) {
+        console.error(error);
+        await interaction.reply({ 
+            content: '❌ Hubo un error al ejecutar este comando.', 
+            ephemeral: true 
+        });
     }
 });
-
-// Comando de configuración
-async function configCommand(message, args) {
-    if (!message.member.permissions.has('ADMINISTRATOR')) {
-        return message.reply('❌ Necesitas permisos de administrador para configurar el bot.');
-    }
-
-    const channel = message.mentions.channels.first();
-    const role = message.mentions.roles.first();
-
-    if (!channel) {
-        return message.reply('❌ Menciona un canal: `!config #canal @rol`');
-    }
-
-    serverConfig.notificationChannel = channel.id;
-    serverConfig.mentionRole = role ? role.id : null;
-
-    message.reply(`✅ Configuración guardada:\n📢 Canal: ${channel}\n${role ? `👥 Rol: ${role}` : '👥 Sin rol mencionado'}`);
-}
 
 // Función principal de chequeo
 async function checkForUpdates() {
@@ -144,6 +289,7 @@ async function checkPClubYouTube() {
 
             if (videoUrl !== lastPosts.pClubYouTube) {
                 lastPosts.pClubYouTube = videoUrl;
+                lastChecked.pClubYouTube = Date.now();
 
                 const embed = new MessageEmbed()
                     .setTitle(`🎥 NUEVO VIDEO P CLUB: ${videoTitle}`)
@@ -173,6 +319,7 @@ async function checkPClubTwitter() {
 
         if (link !== lastPosts.pClubTwitter) {
             lastPosts.pClubTwitter = link;
+            lastChecked.pClubTwitter = Date.now();
 
             const embed = new MessageEmbed()
                 .setTitle(`🐦 NUEVO TWEET P CLUB: ${title.substring(0, 100)}`)
@@ -198,6 +345,7 @@ async function checkPClubMerch() {
         const posts = response.data.data.children;
         if (posts.length > 0 && posts[0].data.id !== lastPosts.pClubMerch) {
             lastPosts.pClubMerch = posts[0].data.id;
+            lastChecked.pClubMerch = Date.now();
             const merch = posts[0].data;
 
             const embed = new MessageEmbed()
@@ -229,6 +377,7 @@ async function checkPClubAnnouncements() {
 
         if (announcement && announcement.data.id !== lastPosts.pClubAnnouncements) {
             lastPosts.pClubAnnouncements = announcement.data.id;
+            lastChecked.pClubAnnouncements = Date.now();
 
             const embed = new MessageEmbed()
                 .setTitle(`📢 ANUNCIO P CLUB: ${announcement.data.title}`)
@@ -261,6 +410,7 @@ async function checkDDLCNews() {
 
         if (importantNews && importantNews.data.id !== lastPosts.ddlcNews) {
             lastPosts.ddlcNews = importantNews.data.id;
+            lastChecked.ddlcNews = Date.now();
 
             const embed = new MessageEmbed()
                 .setTitle(`📰 NOTICIA DDLC: ${importantNews.data.title}`)
@@ -291,6 +441,7 @@ async function checkDDLCMerch() {
 
         if (officialMerch && officialMerch.data.id !== lastPosts.ddlcMerch) {
             lastPosts.ddlcMerch = officialMerch.data.id;
+            lastChecked.ddlcMerch = Date.now();
 
             const embed = new MessageEmbed()
                 .setTitle(`🎁 MERCANCÍA DDLC: ${officialMerch.data.title}`)
@@ -319,6 +470,7 @@ async function checkTeamSalvato() {
 
         if (link !== lastPosts.teamSalvato && title.toLowerCase().includes('ddlc')) {
             lastPosts.teamSalvato = link;
+            lastChecked.teamSalvato = Date.now();
 
             const embed = new MessageEmbed()
                 .setTitle(`🐦 TWEET OFICIAL DDLC: ${title.substring(0, 100)}`)
@@ -336,7 +488,7 @@ async function checkTeamSalvato() {
 }
 
 // ========== COMANDOS ==========
-async function getFanart(message) {
+async function getFanart(interaction) {
     try {
         const sources = [
             'https://www.reddit.com/r/ProjectClub/hot/.json?limit=50',
@@ -362,33 +514,33 @@ async function getFanart(message) {
                 .setColor('#FF69B4')
                 .setFooter(`${source} • por u/${randomFanart.author}`);
             
-            await message.channel.send({ embeds: [embed] });
+            await interaction.editReply({ embeds: [embed] });
         } else {
-            await message.channel.send('❌ No se encontraron fanarts');
+            await interaction.editReply('❌ No se encontraron fanarts');
         }
     } catch (error) {
-        await message.channel.send('❌ Error al obtener fanart');
+        await interaction.editReply('❌ Error al obtener fanart');
     }
 }
 
-async function getLatestNews(message) {
+async function getLatestNews(interaction) {
     try {
         const embed = new MessageEmbed()
             .setTitle('📰 ÚLTIMAS NOTICIAS P CLUB & DDLC')
             .setColor('#5865F2')
             .setTimestamp()
-            .addField('🎮 PROJECT CLUB', 'Usa `!pclub` para noticias específicas', false)
-            .addField('💖 DOKI DOKI LITERATURE CLUB', 'Usa `!ddlc` para noticias del juego original', false)
-            .addField('🛠️ MODS', 'Usa `!mods` para los mods más populares', false)
-            .addField('🛍️ MERCANCÍA', 'Usa `!merch` para productos oficiales', false);
+            .addField('🎮 PROJECT CLUB', 'Usa `/pclub` para noticias específicas', false)
+            .addField('💖 DOKI DOKI LITERATURE CLUB', 'Usa `/ddlc` para noticias del juego original', false)
+            .addField('🛠️ MODS', 'Usa `/mods` para los mods más populares', false)
+            .addField('🛍️ MERCANCÍA', 'Usa `/merch` para productos oficiales', false);
 
-        await message.channel.send({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        await message.channel.send('❌ Error al obtener noticias');
+        await interaction.editReply('❌ Error al obtener noticias');
     }
 }
 
-async function getMerch(message) {
+async function getMerch(interaction) {
     try {
         const [pclubResponse, ddlcResponse] = await Promise.all([
             axios.get(PCLUB_SOURCES.merch, { headers: { 'User-Agent': 'PClub-Discord-Bot/1.0' } }),
@@ -416,13 +568,13 @@ async function getMerch(message) {
             ).join('\n'), false);
         }
 
-        await message.channel.send({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        await message.channel.send('❌ Error al obtener mercancía');
+        await interaction.editReply('❌ Error al obtener mercancía');
     }
 }
 
-async function getTopMods(message) {
+async function getTopMods(interaction) {
     try {
         const response = await axios.get('https://www.reddit.com/r/DDLCMods/top/.json?t=week&limit=20', {
             headers: { 'User-Agent': 'DDLC-Discord-Bot/1.0' }
@@ -447,16 +599,16 @@ async function getTopMods(message) {
                 embed.addField(`${index + 1}. ${mod.data.title}`, `↑ ${mod.data.ups} votes • [Descargar](https://reddit.com${mod.data.permalink})`, false);
             });
 
-            await message.channel.send({ embeds: [embed] });
+            await interaction.editReply({ embeds: [embed] });
         } else {
-            await message.channel.send('❌ No se encontraron mods recientes');
+            await interaction.editReply('❌ No se encontraron mods recientes');
         }
     } catch (error) {
-        await message.channel.send('❌ Error al obtener mods');
+        await interaction.editReply('❌ Error al obtener mods');
     }
 }
 
-async function getDDLCNews(message) {
+async function getDDLCNews(interaction) {
     try {
         const [newsResponse, twitterResponse] = await Promise.all([
             axios.get(DDLC_SOURCES.officialNews, { headers: { 'User-Agent': 'DDLC-Discord-Bot/1.0' } }),
@@ -489,13 +641,13 @@ async function getDDLCNews(message) {
             }
         });
 
-        await message.channel.send({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        await message.channel.send('❌ Error al obtener noticias de DDLC');
+        await interaction.editReply('❌ Error al obtener noticias de DDLC');
     }
 }
 
-async function getPClubInfo(message) {
+async function getPClubInfo(interaction) {
     try {
         const [youtubeResponse, twitterResponse, merchResponse] = await Promise.all([
             axios.get(PCLUB_SOURCES.youtube, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }),
@@ -535,17 +687,17 @@ async function getPClubInfo(message) {
             ).join('\n'), false);
         }
 
-        await message.channel.send({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        await message.channel.send('❌ Error al obtener información de P Club');
+        await interaction.editReply('❌ Error al obtener información de P Club');
     }
 }
 
-async function showStatus(message) {
+async function showStatus(interaction) {
     const channel = serverConfig.notificationChannel ? 
-        message.guild.channels.cache.get(serverConfig.notificationChannel) : 'No configurado';
+        interaction.guild.channels.cache.get(serverConfig.notificationChannel) : 'No configurado';
     const role = serverConfig.mentionRole ? 
-        message.guild.roles.cache.get(serverConfig.mentionRole) : 'No configurado';
+        interaction.guild.roles.cache.get(serverConfig.mentionRole) : 'No configurado';
 
     const embed = new MessageEmbed()
         .setTitle('📊 ESTADO DEL BOT P CLUB & DDLC')
@@ -558,26 +710,69 @@ async function showStatus(message) {
         .addField('✅ Estado', '🟢 ACTIVO', true)
         .setTimestamp();
 
-    await message.channel.send({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
 }
 
-async function showHelp(message) {
-    const embed = new MessageEmbed()
-        .setTitle('🎮 COMANDOS BOT P CLUB & DDLC')
-        .setColor('#5865F2')
-        .setDescription('Bot completo para Project Club y Doki Doki Literature Club')
-        .addField('!config', 'Configurar canal y rol (Admin)', true)
-        .addField('!fanart', 'Fanart aleatorio de P Club o DDLC', true)
-        .addField('!noticias', 'Resumen de noticias', true)
-        .addField('!merch', 'Mercancía oficial de ambos', true)
-        .addField('!mods', 'Top 5 mods más populares de la semana', true)
-        .addField('!ddlc', 'Noticias específicas del juego original', true)
-        .addField('!pclub', 'Información específica de Project Club', true)
-        .addField('!estado', 'Estado y configuración del bot', true)
-        .addField('!ayuda', 'Muestra esta ayuda', true)
-        .setFooter('Notificaciones automáticas para ambos proyectos');
+// COMANDO /version MEJORADO
+async function showVersion(interaction) {
+    const now = Date.now();
+    const lastUpdate = new Date(LAST_UPDATE);
+    const uptime = client.uptime;
+    
+    // Calcular tiempo desde última verificación de cada fuente
+    const getLastCheckTime = (source) => {
+        const diff = now - lastChecked[source];
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(minutes / 60);
+        
+        if (hours > 0) {
+            return `Hace ${hours} hora${hours !== 1 ? 's' : ''}`;
+        } else if (minutes > 0) {
+            return `Hace ${minutes} minuto${minutes !== 1 ? 's' : ''}`;
+        } else {
+            return 'Hace unos segundos';
+        }
+    };
 
-    await message.channel.send({ embeds: [embed] });
+    const embed = new MessageEmbed()
+        .setTitle(`🎮 CLUBASSISTANT v${BOT_VERSION}`)
+        .setColor('#5865F2')
+        .setDescription('Tu asistente oficial para Project Club y DDLC')
+        .addField('📊 Estado del Sistema', `🟢 **Funcionando correctamente**\n⏰ **Uptime:** ${formatUptime(uptime)}\n📅 **Última actualización:** <t:${Math.floor(lastUpdate.getTime() / 1000)}:R>`, false)
+        .addField('🕐 Últimas verificaciones', 
+            `🎥 **YouTube P Club:** ${getLastCheckTime('pClubYouTube')}\n` +
+            `🐦 **Twitter P Club:** ${getLastCheckTime('pClubTwitter')}\n` +
+            `🛍️ **Merch P Club:** ${getLastCheckTime('pClubMerch')}\n` +
+            `📢 **Anuncios P Club:** ${getLastCheckTime('pClubAnnouncements')}\n` +
+            `💖 **Noticias DDLC:** ${getLastCheckTime('ddlcNews')}\n` +
+            `🎁 **Merch DDLC:** ${getLastCheckTime('ddlcMerch')}\n` +
+            `🐦 **Team Salvato:** ${getLastCheckTime('teamSalvato')}`, false)
+        .addField('📝 Notas de la versión', RELEASE_NOTES, false)
+        .addField('🔧 Información Técnica', 
+            `🤖 **Versión:** ${BOT_VERSION}\n` +
+            `📡 **Node.js:** ${process.version}\n` +
+            `💾 **Discord.js:** 13.16.0\n` +
+            `🔄 **Intervalo de chequeo:** 5 minutos\n` +
+            `⚡ **Slash Commands:** ✅ Activados`, false)
+        .setFooter('ClubAssistant - Manteniéndote actualizado desde 2024')
+        .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+}
+
+async function showHelp(interaction) {
+    const embed = new MessageEmbed()
+        .setTitle('🎮 COMANDOS SLASH - CLUBASSISTANT')
+        .setColor('#5865F2')
+        .setDescription('Usa `/` para ver todos los comandos disponibles')
+        .addField('⚙️ Configuración', '`/config` - Configurar notificaciones (Admin)', false)
+        .addField('🎨 Contenido', '`/fanart` - Fanart aleatorio de P Club o DDLC', true)
+        .addField('📰 Noticias', '`/noticias` - Resumen general\n`/ddlc` - Noticias DDLC\n`/pclub` - Info P Club', true)
+        .addField('🛍️ Productos', '`/merch` - Mercancía oficial\n`/mods` - Top 5 mods de la semana', true)
+        .addField('📊 Sistema', '`/estado` - Estado del bot\n`/version` - Info de versión\n`/ayuda` - Esta ayuda', true)
+        .setFooter('Notificaciones automáticas cada 5 minutos • ClubAssistant v' + BOT_VERSION);
+
+    await interaction.editReply({ embeds: [embed] });
 }
 
 // Función para enviar notificaciones
@@ -627,7 +822,17 @@ function formatUptime(ms) {
     const days = Math.floor(ms / 86400000);
     const hours = Math.floor(ms / 3600000) % 24;
     const minutes = Math.floor(ms / 60000) % 60;
-    return `${days}d ${hours}h ${minutes}m`;
+    const seconds = Math.floor(ms / 1000) % 60;
+    
+    if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    } else {
+        return `${seconds}s`;
+    }
 }
 
 // Manejo de errores
