@@ -7,14 +7,11 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
+    "discord.js": "^13.16.0",
     "axios": "^1.6.2",
     "cheerio": "^1.0.0-rc.12"
   },
   "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": ["discord", "bot", "ddlc", "projectclub", "gaming"],
-  "author": "trucogompopro2012",
-  "license": "MIT"
+    "node": ">=16.0.0"
+  }
 }
