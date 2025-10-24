@@ -1,7 +1,8 @@
+
 {
   "name": "clubassistant-bot",
-  "version": "2.4.0",
-  "description": "ClubAssistant - DDLC & Project Club community bot",
+  "version": "2.5.0",
+  "description": "ClubAssistant bot for DDLC & Project Club - notifications, fanart, trivia and more",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -12,6 +13,6 @@
     "cheerio": "1.0.0-rc.12"
   },
   "engines": {
-    "node": "16.x"
+    "node": "16.20.2"
   }
 }
