@@ -1,3 +1,4 @@
+global.ReadableStream = require("stream/web").ReadableStream;
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -179,3 +180,4 @@ client.on('interactionCreate', async (interaction) => {
   try { await cmd.execute(interaction); } catch (e) { console.error(e); await interaction.reply({ content: 'Error ejecutando comando', ephemeral: true }); }
 });
 client.login(process.env.DISCORD_TOKEN || process.env.TOKEN);
+
