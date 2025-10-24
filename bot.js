@@ -181,3 +181,14 @@ client.on('interactionCreate', async (interaction) => {
 });
 client.login(process.env.DISCORD_TOKEN || process.env.TOKEN);
 
+const { Blob, File } = require("buffer");
+global.Blob = Blob;
+global.File = File;
+global.ReadableStream = require("stream/web").ReadableStream;
+global.fetch = require("undici").fetch;
+
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+
