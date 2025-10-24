@@ -191,4 +191,3 @@ const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, But
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-
