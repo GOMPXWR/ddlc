@@ -1,7 +1,7 @@
 {
   "name": "clubassistant-bot",
-  "version": "2.2.0",
-  "description": "Bot de Discord para Project Club y DDLC con integración de X (Twitter), trivia y citas de personajes.",
+  "version": "2.4.0",
+  "description": "ClubAssistant - DDLC & Project Club community bot",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -12,6 +12,6 @@
     "cheerio": "1.0.0-rc.12"
   },
   "engines": {
-    "node": "16.20.2"
+    "node": "16.x"
   }
 }
